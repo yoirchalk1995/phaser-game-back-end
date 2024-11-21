@@ -1,38 +1,54 @@
 const express = require('express');
 const cors = require('cors');
+const db = require('./db')
 
 const app = express();
 const PORT = process.env.PORT;
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Built-in middleware to parse JSON
-app.use(express.urlencoded({ extended: true })); // For URL-encoded data
-
-// In-memory storage for high scores
-let topScores = [
-    { name: 'Player1', score: 1 },
-    { name: 'Player2', score: 2 },
-    { name: 'Player3', score: 3 },
-];
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Endpoint to get high scores
 app.get('/highscores', (req, res) => {
-    res.json({ topScores });
+    db.query('SELECT * FROM highscores ORDER BY score DESC LIMIT 3', (err, results) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to fetch high scores' });
+        }
+        res.json({ topScores: results });
+    });
 });
 
 // Endpoint to update high scores
 app.post('/highscores', (req, res) => {
     const { name, score } = req.body;
 
-    // Add the new high score to the list
-    topScores.push({ name, score });
-    topScores.sort((a, b) => b.score - a.score); // Sort by score descending
-    topScores = topScores.slice(0, 3); // Keep only the top 3 scores
+    if (!name || score === undefined) {
+        return res.status(400).json({ error: 'Name and score are required' });
+    }
 
-    res.json({ message: 'High score added!', topScores });
+    // Insert the new high score
+    db.query(
+        'INSERT INTO highscores (name, score) VALUES (?, ?)',
+        [name, score],
+        (err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to add high score' });
+            }
+
+            // Fetch updated top scores
+            db.query('SELECT * FROM highscores ORDER BY score DESC LIMIT 3', (err, results) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to fetch updated high scores' });
+                }
+                res.json({ message: 'High score added!', topScores: results });
+            });
+        }
+    );
 });
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
